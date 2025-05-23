@@ -21,6 +21,7 @@ const LoginPage = () => {
       const res = await api.post('/login', { correo, contrasena });
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('rol', res.data.rol);
+      localStorage.setItem('username', res.data.nombre);
       navigate('/citas');
     } catch {
       setError('Credenciales inválidas');
@@ -41,7 +42,7 @@ const LoginPage = () => {
           }}>
             <CardMedia
               component="img"
-              image="https://images.unsplash.com/photo-1594009904612-60b38429ab4a?auto=format&fit=crop&q=80"
+              image="/images/veterinario-mascota.jpeg"
               alt="Veterinario con mascota"
               sx={{ 
                 height: '100%',
