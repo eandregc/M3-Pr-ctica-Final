@@ -1,48 +1,41 @@
+const { poolPromise, sql } = require('../config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { createUser, getUserByUsername } = require('../models/userModel');
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
 
-const register = async (req, res) => {
+exports.login = async (req, res) => {
+  const { correo, contrasena } = req.body;
+  console.log("🟡 LOGIN REQUEST:", correo, contrasena);
+
   try {
-    const { username, password } = req.body;
-    
-    const existingUser = await getUserByUsername(username);
-    if (existingUser) {
-      return res.status(400).json({ error: 'El usuario ya existe' });
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('correo', sql.NVarChar, correo)
+      .query('SELECT * FROM Usuarios WHERE correo = @correo');
+
+    if (result.recordset.length === 0) {
+      console.log("🔴 Usuario no encontrado");
+      return res.status(404).send('Usuario no encontrado');
     }
 
-    await createUser(username, password);
-    res.status(201).json({ message: 'Usuario registrado exitosamente' });
+    const user = result.recordset[0];
+    console.log("🟢 Usuario encontrado:", user.correo);
+    console.log("🧪 Hash guardado:", user.contrasena_hash);
 
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
+    const isValid = await bcrypt.compare(contrasena, user.contrasena_hash);
+    console.log("🧪 Comparación:", isValid);
 
-const login = async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    
-    const user = await getUserByUsername(username);
-    
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+    if (!isValid) {
+      console.log("🔴 Contraseña incorrecta");
+      return res.status(401).send('Contraseña incorrecta');
     }
 
-    const token = jwt.sign(
-      { userId: user.id, username: user.username },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
+    const token = jwt.sign({ id: user.id, rol: user.rol }, JWT_SECRET, { expiresIn: '1d' });
+    console.log("✅ Login exitoso, enviando token");
+    res.json({ token, rol: user.rol });
 
-    res.json({ 
-      message: 'Login exitoso',
-      token 
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error("❌ Error en login:", err);
+    res.status(500).send('Error en login');
   }
 };
-
-module.exports = { register, login };

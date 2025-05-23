@@ -1,30 +1,123 @@
 const express = require('express');
 const cors = require('cors');
-const morgan = require('morgan');
-const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('./swagger.json');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const sql = require('mssql');
 require('dotenv').config();
 
-const usersRoutes = require('./routes/users.routes');
-const loginRoutes = require('./routes/login.routes');
-
 const app = express();
-
-// Middlewares
-app.use(express.json());
 app.use(cors());
-app.use(morgan('dev'));
+app.use(express.json());
 
-// Rutas
-app.use('/users', usersRoutes);
-app.use('/login', loginRoutes);
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
 
-// Documentación Swagger
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+const dbConfig = {
+    user: 'db_a25c05_sapitos_admin',
+    password: 'momju6-baTnax-rusxyq',
+    server: 'sql8020.site4now.net',
+    database: 'db_a25c05_sapitos',
+    options: { encrypt: true }
+};
 
-// Inicio del servidor
-const PORT = process.env.PORT || 3000;
+const poolPromise = new sql.ConnectionPool(dbConfig)
+    .connect()
+    .then(pool => {
+        console.log('Conectado a SQL Server');
+        return pool;
+    })
+    .catch(err => console.log('Error al conectar DB:', err));
+
+const verifyToken = (req, res, next) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(403).send('Token requerido');
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) return res.status(401).send('Token inválido');
+        req.user = decoded;
+        next();
+    });
+};
+
+app.post('/api/login', async (req, res) => {
+    const { correo, contrasena } = req.body;
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('correo', sql.NVarChar, correo)
+            .query('SELECT * FROM Usuarios WHERE correo = @correo');
+
+        if (result.recordset.length === 0) return res.status(404).send('Usuario no encontrado');
+
+        const user = result.recordset[0];
+        const isValid = await bcrypt.compare(contrasena, user.contrasena_hash);
+        if (!isValid) return res.status(401).send('Contraseña incorrecta');
+
+        const token = jwt.sign({ id: user.id, rol: user.rol }, JWT_SECRET, { expiresIn: '1d' });
+        res.json({ token, rol: user.rol });
+    } catch (err) {
+        res.status(500).send('Error en login');
+    }
+});
+
+app.post('/api/register', async (req, res) => {
+    const { nombre, correo, contrasena, rol } = req.body;
+    try {
+        const hash = await bcrypt.hash(contrasena, 10);
+        const pool = await poolPromise;
+        await pool.request()
+            .input('nombre', sql.NVarChar, nombre)
+            .input('correo', sql.NVarChar, correo)
+            .input('contrasena_hash', sql.NVarChar, hash)
+            .input('rol', sql.NVarChar, rol)
+            .query('INSERT INTO Usuarios (nombre, correo, contrasena_hash, rol) VALUES (@nombre, @correo, @contrasena_hash, @rol)');
+        res.status(201).send('Usuario registrado');
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error al registrar usuario');
+    }
+});
+
+app.get('/api/citas', verifyToken, async (req, res) => {
+    const { id, rol } = req.user;
+    try {
+        const pool = await poolPromise;
+        let query;
+        if (rol === 'veterinario' || rol === 'admin') {
+            query = "SELECT * FROM Citas WHERE estado = 'programada'";
+        } else if (rol === 'cliente') {
+            query = `SELECT c.* FROM Citas c 
+                     JOIN Mascotas m ON c.mascota_id = m.id 
+                     JOIN Clientes cl ON m.cliente_id = cl.id 
+                     WHERE cl.usuario_id = ${id} AND c.estado = 'programada'`;
+        } else {
+            return res.status(403).send('Rol no permitido');
+        }
+        const result = await pool.request().query(query);
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).send('Error al obtener citas');
+    }
+});
+
+app.post('/api/mascotas', verifyToken, async (req, res) => {
+    const { nombre, especie, raza, edad, peso, cliente_id } = req.body;
+    try {
+        const pool = await poolPromise;
+        await pool.request()
+            .input('nombre', sql.NVarChar, nombre)
+            .input('especie', sql.NVarChar, especie)
+            .input('raza', sql.NVarChar, raza)
+            .input('edad', sql.Int, edad)
+            .input('peso', sql.Decimal, peso)
+            .input('cliente_id', sql.Int, cliente_id)
+            .query(`INSERT INTO Mascotas (nombre, especie, raza, edad, peso, cliente_id)
+                    VALUES (@nombre, @especie, @raza, @edad, @peso, @cliente_id)`);
+        res.status(201).send('Mascota registrada');
+    } catch (err) {
+        res.status(500).send('Error al registrar mascota');
+    }
+});
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Servidor escuchando en http://localhost:${PORT}`);
-  console.log(`Documentación Swagger en http://localhost:${PORT}/api-docs`);
+    console.log(`Servidor backend corriendo en puerto ${PORT}`);
 });
