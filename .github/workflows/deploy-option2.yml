@@ -1,4 +1,4 @@
-name: Deploy to Azure
+name: Deploy to Azure (Option 2 - with Clean)
 
 on:
   push:
@@ -69,17 +69,20 @@ jobs:
         </configuration>
         EOF
 
-    - name: Zip backend
+    - name: Clean App Service (Linux)
       run: |
-        cd server
-        zip -r ../backend.zip . -x "node_modules/*"
+        curl -X POST "https://${{ secrets.AZURE_WEBAPP_BACKEND_NAME }}.scm.azurewebsites.net/api/command" \
+        -u "${{ secrets.AZURE_WEBAPP_BACKEND_PUBLISH_PROFILE_USERPASS }}" \
+        -H "Content-Type: application/json" \
+        --data '{"command": "rm -rf /home/site/wwwroot/*"}'
 
-    - name: Deploy to Azure Web App via zipdeploy
-      run: |
-        curl -X POST "https://${{ secrets.AZURE_WEBAPP_BACKEND_NAME }}.scm.azurewebsites.net/api/zipdeploy" \
-        -u "${{ secrets.AZURE_WEBAPP_BACKEND_PUBLISH_PROFILE }}" \
-        --data-binary @"backend.zip" \
-        -H "Content-Type: application/octet-stream"
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ secrets.AZURE_WEBAPP_BACKEND_NAME }}
+        slot-name: 'production'
+        package: './server'
+        publish-profile: ${{ secrets.AZURE_WEBAPP_BACKEND_PUBLISH_PROFILE_FULL }}
 
     - name: Verify deployment
       run: |

@@ -2,10 +2,49 @@
 
 Este proyecto es un sistema completo para la gestión de una clínica veterinaria que atiende todo tipo de animales, desde mascotas tradicionales hasta especies exóticas. Desarrollado con React en el frontend y Express/Node.js en el backend.
 
+## 🚀 Deployment en Azure
+
+**¡Tu aplicación está configurada con GitHub Continuous Deployment!** 
+
+### ✅ Secrets ya configurados:
+- Azure Client ID, Subscription ID y Tenant ID están listos
+
+### 📋 Pasos restantes:
+1. **Agregar secrets faltantes** en GitHub:
+   - `AZURE_CLIENT_SECRET` (obtenerlo de Azure Portal)
+   - `AZURE_WEBAPP_NAME` (nombre de tu Web App)
+
+2. **Activar deployment**: Haz push a `main`
+
+### Scripts de configuración:
+```powershell
+.\setup-deployment.ps1  # Configuración completa
+```
+
+📖 **Para instrucciones detalladas, revisa [AZURE_DEPLOYMENT.md](./AZURE_DEPLOYMENT.md)**
+
+## 💻 Desarrollo Local
+
+### Configuración Rápida:
+```powershell
+# Instalar dependencias y preparar para desarrollo
+.\setup-deployment.ps1
+
+# Probar localmente
+.\test-local.ps1
+
+# Iniciar servidor
+cd server
+npm start
+```
+
+La aplicación estará disponible en `http://localhost:3001`
+
 ## Estructura del Proyecto
 
 - `client/`: Aplicación frontend desarrollada con React
 - `server/`: API backend desarrollada con Express/Node.js
+- `.github/workflows/`: Pipelines de CI/CD para Azure
 
 ## Requisitos
 
