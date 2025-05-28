@@ -1,4 +1,4 @@
-name: Deploy to Azure
+name: Deploy to Azure (Modern Auth)
 
 on:
   push:
@@ -19,40 +19,44 @@ jobs:
         node-version: '18'
         cache: 'npm'
         cache-dependency-path: |
-          server/package-lock.json
           client/package-lock.json
+          server/package-lock.json
 
-    - name: Install backend dependencies
-      run: |
-        cd server
-        npm ci
-
-    - name: Install frontend dependencies
+    - name: Install client dependencies
       run: |
         cd client
         npm ci
 
-    - name: Build frontend
+    - name: Build React frontend
       run: |
         cd client
         npm run build
 
-    - name: Prepare backend for deployment
+    - name: Copy frontend build to server
       run: |
-        # Copy frontend build to server public folder
         mkdir -p server/public
         cp -r client/build/* server/public/
-        
-        # Create web.config for Azure App Service (Node.js)
+
+    - name: Install server dependencies
+      run: |
+        cd server
+        npm ci --production
+
+    - name: Create web.config for Azure
+      run: |
         cat > server/web.config << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <configuration>
           <system.webServer>
+            <webSocket enabled="false" />
             <handlers>
               <add name="iisnode" path="index.js" verb="*" modules="iisnode"/>
             </handlers>
             <rewrite>
               <rules>
+                <rule name="NodeInspector" patternSyntax="ECMAScript" stopProcessing="true">
+                  <match url="^index.js\/debug[\/]?" />
+                </rule>
                 <rule name="StaticContent">
                   <action type="Rewrite" url="public{REQUEST_URI}"/>
                 </rule>
@@ -67,21 +71,18 @@ jobs:
             <iisnode watchedFiles="web.config;*.js"/>
           </system.webServer>
         </configuration>
-        EOF    - name: Clean previous deployment files
-      run: |
-        rm -f backend.zip
+        EOF
 
-    - name: Zip backend
-      run: |
-        cd server
-        zip -r ../backend.zip * .[^.]* -x "node_modules/" ".env" "tests/"
-
-    - name: Deploy to Azure Web App via zipdeploy
-      run: |
-        curl -X POST "https://sapitos.scm.azurewebsites.net/api/zipdeploy" \
-        --user "sapitos:${{ secrets.AZURE_WEBAPP_PUBLISH_PASSWORD }}" \
-        --data-binary @"backend.zip"
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: './server'
+        clean: true
 
     - name: Verify deployment
       run: |
-        echo "Deployment completed. Please check your Azure Web App at: https://sapitos.azurewebsites.net"
+        echo "🚀 Deployment completed successfully!"
+        echo "📱 Your app is available at: https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+        echo "📊 Check deployment logs in Azure Portal if needed"
