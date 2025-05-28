@@ -1,4 +1,4 @@
-name: Deploy to Azure
+name: Deploy Backend and Frontend to Azure
 
 on:
   push:
@@ -67,21 +67,22 @@ jobs:
             <iisnode watchedFiles="web.config;*.js"/>
           </system.webServer>
         </configuration>
-        EOF    - name: Clean previous deployment files
+        EOF
+
+    - name: Clean previous deployment files
       run: |
         rm -f backend.zip
 
     - name: Zip backend
       run: |
-        cd server
-        zip -r ../backend.zip * .[^.]* -x "node_modules/" ".env" "tests/"
+        zip -r backend.zip server -x "server/node_modules/*"
 
     - name: Deploy to Azure Web App via zipdeploy
       run: |
-        curl -X POST "https://sapitos.scm.azurewebsites.net/api/zipdeploy" \
-        --user "sapitos:${{ secrets.AZURE_WEBAPP_PUBLISH_PASSWORD }}" \
+        curl -X POST "https://${{ secrets.AZURE_WEBAPP_BACKEND_NAME }}.scm.azurewebsites.net/api/zipdeploy" \
+        -u ${{ secrets.AZURE_WEBAPP_BACKEND_PUBLISH_PROFILE }} \
         --data-binary @"backend.zip"
 
     - name: Verify deployment
       run: |
-        echo "Deployment completed. Please check your Azure Web App at: https://sapitos.azurewebsites.net"
+        echo "Deployment completed. Please check your Azure Web App at: https://${{ secrets.AZURE_WEBAPP_BACKEND_NAME }}"
